@@ -411,14 +411,43 @@ $$
 
 that just compares each input $x_i$ to its encoded and decoded counterpart $\tilde x_i = D_\theta(E_\psi(x_i))$. Using $\mathcal{L}$, we can just train the two neural networks to optimize the compression, which is an *unsupervised* training scheme because no labeling is required for the inputs $B$.
 
-To generate new plausible entries for the input space $X$, a naive approach would be to simply take random points $z \in Z$ or in an open cover $\tilde Z \subset Z$ for $E_\psi(B)$ and store $D_\theta(z)$ for those random points. Unfortunately the former doesn't work for traditional learn-based autoencoders because $D_\theta$, in general, isn't a stable function, ie, 
+To generate new plausible entries for the input space $X$, a naive approach would be to simply take random points $z \in Z$ or in an open cover $\tilde Z \subset Z$ for $E_\psi(B)$ and store $D_\theta(z)$ for those random points. Unfortunately this doesn't work for traditional learn-based autoencoders because $D_\theta$, in general, isn't a stable function, ie, 
 
 $$
 	\newcommand{\notimplies}{\;\not\!\!\!\implies}
 	\big| z - E_\psi(x_i) \big|\text{ is small} \notimplies \mathcal{L}(D_\theta(z), x_i) \text{ is small}.
 $$
 
+To solve this problem and regularize the latent space, we can modify our encoder to produce a probability distribution. Instead of mapping $x0 \in X$ to a single point $z0 \in Z$ as a traditional encoder, a variational encoder does the following
 
+$$
+	g_\psi(x0) = q_\psi(z | x0) \in P(Z),
+$$
+
+in which $P(Z)$ is the space of probability measures on $Z$. To use this new encoder, we can define a new loss function:
+
+$$
+	\mathcal{L}'_B(\theta, \psi) 
+= 
+	\frac{1}{N} \sum_{i=1}^N 
+	\Big[
+		 \mathcal{L}\big(D_\theta(\tilde z_i), x_i\big)
+		 +
+		\mathcal{L}_P\big(q_\psi(x_i), \mathcal{N}(0,1)\big)
+	\Big],
+$$
+
+in which
+
+$$
+	\tilde z_i\text{ is a single random sample from } g_\psi(x_i)
+$$
+
+$$
+	\mathcal{L}_P \text{ is a loss function for two probabilities in }P(Z)
+$$
+
+Naturally, one can tweak the stochastic loss function $\mathcal{L}'_B$ by using different sampling schemes or different arguments for $\mathcal{L}_P$, but this example encapsulates the basic idea of *variational autoencoders* or VACs for short.
 
 **Definition (Encoder latent)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
 
