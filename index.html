@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Rodrigo Loro Schuller" />
+  <title>Occupancy Network</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <link rel="stylesheet" href="pandoc.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS_CHTML-full" type="text/javascript"></script>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Occupancy Network</h1>
+<p class="author">Rodrigo Loro Schuller</p>
+<p class="date">December 2019</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a><ul>
+<li><a href="#presentation"><span class="toc-section-number">1.1</span> Presentation</a></li>
+<li><a href="#abstract-definition"><span class="toc-section-number">1.2</span> Abstract Definition</a></li>
+</ul></li>
+<li><a href="#other-representations"><span class="toc-section-number">2</span> Other Representations</a><ul>
+<li><a href="#voxels"><span class="toc-section-number">2.1</span> Voxels</a></li>
+<li><a href="#point-clouds"><span class="toc-section-number">2.2</span> Point clouds</a></li>
+<li><a href="#meshes"><span class="toc-section-number">2.3</span> Meshes</a></li>
+</ul></li>
+<li><a href="#the-devil-is-in-the-details"><span class="toc-section-number">3</span> The Devil is in The Details</a><ul>
+<li><a href="#common"><span class="toc-section-number">3.1</span> Common</a><ul>
+<li><a href="#onet-architecture---the-big-picture"><span class="toc-section-number">3.1.1</span> ONet Architecture - The Big Picture</a></li>
+<li><a href="#activation-functions"><span class="toc-section-number">3.1.2</span> Activation Functions</a></li>
+<li><a href="#conditional-batch-normalization-cbn-layer"><span class="toc-section-number">3.1.3</span> Conditional Batch Normalization (CBN) Layer</a></li>
+<li><a href="#onet-resnet-block"><span class="toc-section-number">3.1.4</span> ONet ResNet-block</a></li>
+<li><a href="#pre-processing-shapes"><span class="toc-section-number">3.1.5</span> Pre-processing Shapes</a></li>
+<li><a href="#training-and-the-loss-function"><span class="toc-section-number">3.1.6</span> Training And The Loss Function</a></li>
+</ul></li>
+<li><a href="#single-view-image-reconstruction"><span class="toc-section-number">3.2</span> Single View Image Reconstruction</a><ul>
+<li><a href="#the-image-encoder"><span class="toc-section-number">3.2.1</span> The Image Encoder</a></li>
+</ul></li>
+<li><a href="#point-cloud-completion"><span class="toc-section-number">3.3</span> Point Cloud Completion</a></li>
+<li><a href="#voxel-super-resolution"><span class="toc-section-number">3.4</span> Voxel Super Resolution</a></li>
+<li><a href="#unconditional-mesh-generation"><span class="toc-section-number">3.5</span> Unconditional Mesh Generation</a><ul>
+<li><a href="#the-encoder"><span class="toc-section-number">3.5.1</span> The Encoder</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="introduction"><span class="header-section-number">1</span> Introduction</h1>
+<h2 id="presentation"><span class="header-section-number">1.1</span> Presentation</h2>
+<p>Click <a href="slides_no_copyright/index.html">here</a> to see it in your browser - Firefox is recommended.</p>
+<p>Click <a href="slides_no_copyright/slides.pdf">here</a> for the PDF version.</p>
+<h2 id="abstract-definition"><span class="header-section-number">1.2</span> Abstract Definition</h2>
+<p>The problem of representing 3D structures is harder than its 2D counterpart. Good solutions for it are specially important for learning-based algorithms, since bad representations usually yield unreasonable large memory requirements, glaring inconsistencies or other difficulties.</p>
+<p>An <em>Occupancy Network</em> is a state-of-the-art solution that uses implicit functions (neural networks with parameters <span class="math inline">\(\theta\)</span>) to represent 3D objects in a compact and expressive manner. Bellow we have its formal definition.</p>
+<p><strong>Definition (Occupancy Network)</strong> For a given input <span class="math inline">\(x \in X\)</span>, we want a binary classification neural network: <span class="math inline">\(f^x_\theta : \mathbb{R}^3 \to [0,1]\)</span>. We can just add <span class="math inline">\(x\)</span> to the inputs, ie,</p>
+<p><span class="math display">\[f_\theta : \mathbb{R}^3 \times X \to [0,1].\]</span></p>
+<p><span class="math inline">\(f_\theta\)</span> is called the <em>Occupancy Network</em>.</p>
+<h1 id="other-representations"><span class="header-section-number">2</span> Other Representations</h1>
+<p>A more detailed (and visual) comparison can be found in the presentation. To avoid redundancy, we’ll present a brief synthesis with the main takeaways.</p>
+<h2 id="voxels"><span class="header-section-number">2.1</span> Voxels</h2>
+<p>Pros</p>
+<ul>
+<li>Simple to use;</li>
+</ul>
+<p>Cons</p>
+<ul>
+<li>Doesn’t quite work in low resolutions;</li>
+<li>Requires a lot of memory;</li>
+</ul>
+<h2 id="point-clouds"><span class="header-section-number">2.2</span> Point clouds</h2>
+<p>Pros</p>
+<ul>
+<li>Simple to use and behaves well under geometric transformations;</li>
+<li>Doesn’t require a lot of memory;</li>
+</ul>
+<p>Cons</p>
+<ul>
+<li>Hard to extract the underlying geometry;</li>
+</ul>
+<h2 id="meshes"><span class="header-section-number">2.3</span> Meshes</h2>
+<p>Pros</p>
+<ul>
+<li>Simple to use and behaves well under geometric transformations;</li>
+<li>Doesn’t require a lot of memory;</li>
+</ul>
+<p>Cons</p>
+<ul>
+<li>Topology limitations or consistency problems - depending on the approach;</li>
+</ul>
+<h1 id="the-devil-is-in-the-details"><span class="header-section-number">3</span> The Devil is in The Details</h1>
+<p>Using the abstract definition, the authors presented solutions for 4 different problems. In order to set apart the common definitions from the specificities of each problem, this section is divided in 5 subsections.</p>
+<p>Besides the expected lack of complete coverage of all implementation nuances, a few inconsistencies were found in the article and in the supplementary material. The source code was an important settler for the questions that arouse during my readings, so we’ll adopt the following typographical convention:</p>
+<p>(see <code>path_to_a_file</code>) refers to a file in <a href="https://github.com/autonomousvision/occupancy_networks">https://github.com/autonomousvision/occupancy_networks</a></p>
+<h2 id="common"><span class="header-section-number">3.1</span> Common</h2>
+<h3 id="onet-architecture---the-big-picture"><span class="header-section-number">3.1.1</span> ONet Architecture - The Big Picture</h3>
+<p>In all experiments, the same base architecture was employed:</p>
+<figure>
+<img src="img/common_arch.svg" style="width:80.0%" alt="" /><figcaption><strong>Figure 1</strong> Architecture of the <em>Occupancy Network</em>.</figcaption>
+</figure>
+<p><strong>Input</strong> The output of a task-specific encoder <span class="math inline">\(c \in X = \mathbb{R}^C\)</span> and a batch of <span class="math inline">\(T\)</span> points <span class="math inline">\(p_i \in \mathbb{R}^3\)</span>.</p>
+<p><strong>Output</strong> To be consistent with our previous definition, the output is given by the numbers <span class="math display">\[f_{\theta}(c, p_1),\, \cdots,\, f_{\theta}(c, p_T) \in [0,1].\]</span> In other words, for each point <span class="math inline">\(p_i\)</span> in the batch, we get a number in <span class="math inline">\([0, 1]\)</span>.</p>
+<p><strong>Evaluation</strong> To show how the architecture works we’ll first explain the <em>Big Picture</em> - how the components are connected - and afterwards tell exactly what each component does.</p>
+<p>For each point <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> in the batch:</p>
+<ol type="1">
+<li>Use a fully-connected layer to produce a 256-dim feature vector from <span class="math inline">\(p_i\)</span>;</li>
+<li>Do 5 times:
+<ul>
+<li>Take the output from the previous step and use a <strong>ONet ResNet-block</strong> to produce a new 256-dim feature vector;</li>
+</ul></li>
+<li>Take the output from the last <strong>ONet ResNet-block</strong> and pass through a <strong>CBN layer</strong> and a <strong>ReLu activation</strong>;</li>
+<li>Pass the result through a fully-connected layer to project the features down to 1-dim;</li>
+<li>Use a <strong>Sigmoid activation</strong> to obtain a number in <span class="math inline">\([0,1]\)</span>;</li>
+</ol>
+<p><strong>Observation</strong> In the ONet article, they originally used the nomenclature <em>ResNet-blocks</em>. Since there’re different kinds of <em>ResNet-blocks</em>, I’ve added specification tokens to avoid unnecessary confusion.</p>
+<h3 id="activation-functions"><span class="header-section-number">3.1.2</span> Activation Functions</h3>
+<p><strong>ReLU</strong> From the source code (see <code>im2mesh/layers.py</code>), it’s clear that the standard PyTorch’s ReLU was used. For both the current stable version (1.3.1) and the version used in the project (1.0.0), it is defined as</p>
+<p><span class="math display">\[ 
+\mathrm{ReLU}(x)
+= 
+\max\{0, x\}.
+\]</span></p>
+<p><strong>Sigmoid</strong> The sigmoid function is actually implemented in the mesh extraction phase (see <code>im2mesh/onet/generation.py - line 171</code>), by applying the inverse function to the threshold:</p>
+<p><code>threshold = np.log(self.threshold) - np.log(1. - self.threshold)</code></p>
+<p>By inverting the threshold function again, we can recoup the information:</p>
+<p><span class="math display">\[\mathrm{Sigmoid}(x) = \frac{1}{1 + e^{-x}}.\]</span></p>
+<p>This is known as the <em>logistic sigmoid</em>.</p>
+<h3 id="conditional-batch-normalization-cbn-layer"><span class="header-section-number">3.1.3</span> Conditional Batch Normalization (CBN) Layer</h3>
+<p>Let <span class="math inline">\((p_i)_{i=[1:T]}\)</span> be the vector of the input points, as shown in Figure 1. With this indexation in mind, let us define a CBN layer [1]:</p>
+<p><strong>Input</strong></p>
+<ol type="1">
+<li><span class="math inline">\(c\)</span>, which is the output from the task-specific encoder;</li>
+<li>The output from the last layer: <span class="math inline">\(\left(f_{in}^i\right)_{i \in [1:T]}\)</span>, in which <span class="math inline">\(f_{in}^i \in \mathbb{R}^{256}\)</span>;</li>
+</ol>
+<p><strong>Output</strong> A vector <span class="math inline">\(\left(f_{out}^i\right)_{i \in [1:T]}\)</span>, with <span class="math inline">\(f_{out}^i \in \mathbb{R}^{256}\)</span>.</p>
+<p><strong>Evaluation</strong> Compute the first two moments of <span class="math inline">\(\left(f_{in}^i\right)_{i \in [1:T]}\)</span> over all <span class="math inline">\(i\in[1:T]\)</span>:</p>
+<p><span class="math display">\[ \mu = \mathrm{E}\left[f_{in}^i\right] \text{ and}\]</span></p>
+<p><span class="math display">\[ \sigma^2 = \mathrm{Var}\left[f_{in}^i\right];\]</span></p>
+<p>then use two fully-connected layers to obtain 256-dim vectors <span class="math inline">\(\beta(c)\)</span> and <span class="math inline">\(\gamma(c)\)</span> to evaluate the final output</p>
+<p><span class="math display">\[f_{out}^i = \gamma(c) \frac{f_{in}^i - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta(c),\]</span></p>
+<p>in which <span class="math inline">\(\epsilon = 10^{-5}\)</span> is a constant added for numerical stability.</p>
+<p>Since the sum between scalars and vectors is already implicitly defined in the denominator, it’s important to highlight (as in the original article [1]) that the multiplication by <span class="math inline">\(\gamma\)</span> is a <em>piecewise</em> (not inner) product.</p>
+<p><strong>Observation</strong> The PyTorch’s class <code>BatchNorm1d</code> [2], used to compute <span class="math inline">\(\frac{f_{in}^i - \mu}{\sqrt{\sigma^2 + \epsilon}}\)</span> (see <code>im2mesh/layers.py</code>), keeps a running mean of the first two moments. These estimates are then used for normalization during evaluation.</p>
+<p>[1] <a href="https://arxiv.org/abs/1502.03167">Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift</a> - Sergey Ioffe, Christian Szegedy (2015)</p>
+<p>[2] <a href="https://pytorch.org/docs/stable/nn.html#batchnorm1d">torch.nn.modules.batchnorm</a></p>
+<h3 id="onet-resnet-block"><span class="header-section-number">3.1.4</span> ONet ResNet-block</h3>
+<p>We’ll now describe a single ONet ResNet-block (see <code>im2mesh/layers.py - class CResnetBlockConv1d</code>) as the composition of previously defined components, in the order of application:</p>
+<ol type="1">
+<li>CBN layer;</li>
+<li>ReLU activation function in each dimension;</li>
+<li>Fully-connected layer;</li>
+<li>CBN layer;</li>
+<li>ReLU activation function in each dimension;</li>
+<li>Fully-connected layer;</li>
+</ol>
+<p>To get the output of the ONet ResNet-block, we then sum the input of step 1 to the output of step 6.</p>
+<h3 id="pre-processing-shapes"><span class="header-section-number">3.1.5</span> Pre-processing Shapes</h3>
+<p><strong>Definition (Occupancy function)</strong> Given a solid shape <span class="math inline">\(S \subset \mathbb{R}^3\)</span>, the <em>occupancy function</em> <span class="math inline">\(o : \mathbb{R}^3 \to \{0, 1\}\)</span> is defined as <span class="math display">\[
+    o(p)
+=
+    \begin{cases}
+        0 &amp;&amp; \text{if } p\notin S \\
+        1 &amp;&amp; \text{if } p\in S \\
+    \end{cases}.
+\]</span> in other words, the <em>occupancy function</em> is the characteristic function for the set of the solid shape.</p>
+<p>All 4 experiments used the ShapeNet [?] database for training, which is a dataset composed of annotated CAD meshes. To extract the data from each of the shapes, the following procedure was used:</p>
+<ol type="1">
+<li>Make sure the mesh is watertight with code provided by Stutz et al. [?];</li>
+<li>Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;</li>
+<li>Using an uniform random distribution, sample 100k points from the new bounding box with 0.05 padding on the sides;</li>
+<li>Choose (with repetition) <span class="math inline">\(K=2048\)</span> points;</li>
+<li>For each of the <span class="math inline">\(K\)</span> chosen points, compute <span class="math inline">\(o_i = o(p_i)\)</span> and store both <span class="math inline">\((p_i)_{i \in [1:K]}\)</span> and <span class="math inline">\((o_i)_{i\in [1:K]}\)</span> in a file;</li>
+</ol>
+<p><strong>Observation</strong> Contradicting the supplementary material, the source code defines <span class="math inline">\(K=1024\)</span> (step 4) for the voxel super resolution experiment (see <code>configs/voxels/onet.yaml</code> and <code>configs/voxels/onet_pretrained.yaml</code>).</p>
+<p>[?] <a href="https://arxiv.org/abs/1512.03012">ShapeNet: An Information-Rich 3D Model Repository</a> - A. X. Chang et al. (2015)</p>
+<h3 id="training-and-the-loss-function"><span class="header-section-number">3.1.6</span> Training And The Loss Function</h3>
+<p>With the exception of unsupervised mesh generation - which will be explained later - the same loss function was adopted in all experiments:</p>
+<p><strong>Definition (Mini-batch loss function)</strong> Let <span class="math inline">\(\mathcal{B}\)</span> be a subset of 64 (see <code>configs/*/onet.yaml</code>) preprocessed shapes from ShapeNet. The <em>mini-batch loss function</em> is defined as</p>
+<p><span class="math display">\[
+    \mathcal{L}_{\mathcal{B}}(\theta) 
+= 
+    \frac{1}{|\mathcal{B}|}  \sum_{i=1}^{|\mathcal{B}|} 
+        \sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},c_i), o_{ij}\right),
+\]</span></p>
+<p>in which <span class="math inline">\(c_i\)</span> is the output from the task-specific encoder for the <span class="math inline">\(i\)</span>th shape and <span class="math inline">\(\mathcal{L}\)</span> is a cross-entropy classification loss. This function isn’t explicitly defined in the article nor in the supplementary material, which is not a problem for an open source project. These are the 4 relevant lines (see <code>im2mesh/onet/training.py</code>)</p>
+<pre><code>168:        logits = self.model.decode(p, z, c, **kwargs).logits
+169:        loss_i = F.binary_cross_entropy_with_logits(
+170:            logits, occ, reduction=&#39;none&#39;)
+171:        loss = loss + loss_i.sum(-1).mean()</code></pre>
+<p><code>logits</code> is the tensor <span class="math inline">\(f_\theta(p_{ij},c_i)\)</span> without the <em>logistic sigmoid</em> and <code>occ</code> is the tensor of the ground true occupancies <span class="math inline">\(o_{ij}\)</span>. <a href="https://pytorch.org/docs/stable/nn.functional.html#binary-cross-entropy-with-logits"><code>binary_cross_entropy_with_logits</code></a> is a PyTorch’s function that computes the following tensor:</p>
+<p><span class="math display">\[
+    l(x, y) = L = \{l_1, \cdots, l_N\}^T
+\]</span></p>
+<p>in which</p>
+<p><span class="math display">\[
+    l_n = - \Big[ y_n \log \big(\mathrm{Sigmoid}(x_n)\big) + (1-y_n) \log\big(1-\mathrm{Sigmoid}(x_n)\big)\Big].
+\]</span></p>
+<p>In other words, it’s a numerically more stable version of the composition of the logistic sigmoid and a binary cross entropy function. Translating this to our naming conventions yields</p>
+<p><span class="math display">\[
+    \mathcal{L}\left(f_\theta(p_{ij},c_i), o_{ij}\right) 
+:=
+    -\Big[ o_{ij} \log \big(f_\theta(p_{ij},c_i)\big) + (1-o_{ij}) \log\big(1-f_\theta(p_{ij},c_i)\big)\Big].
+\]</span></p>
+<p>Since <span class="math inline">\(o_{ij} \in \{0, 1\}\)</span>, we can also write <span class="math inline">\(\mathcal{L}\)</span> in the following way:</p>
+<p><span class="math display">\[
+    \mathcal{L}\left(f_\theta(p_{ij},c_i), o_{ij}\right)
+=
+    -
+    \begin{cases}
+        \log \big(f_\theta(p_{ij},c_i)\big) &amp;&amp; \text{if } o_{ij} = 1 \\
+        \log\big(1-f_\theta(p_{ij},c_i)\big) &amp;&amp; \text{if } o_{ij} = 0
+    \end{cases}.
+\]</span> Note that the enhanced numerical stability of <a href="https://pytorch.org/docs/stable/nn.functional.html#binary-cross-entropy-with-logits"><code>binary_cross_entropy_with_logits</code></a> over the naive composition also explains why the <em>logistic sigmoid</em> isn’t embedded in the architecture itself.</p>
+<p><span class="math inline">\(\blacksquare\)</span></p>
+<p>The <em>mini-batch gradient descent</em> is a variation of the standard gradient descent. Instead of computing the partial derivatives of the loss function using the entire set of shapes each time, the database is divided in batches or partitions. Then, for each partition, we just approximate the true gradient and update the neural network parameters <span class="math inline">\(\theta\)</span> accordingly. This process is repeated until a stop criteria is triggered.</p>
+<p><strong>Observation</strong> For all ONet experiments, the stop criteria is based on the IoU metric.</p>
+<p>To compute the gradient approximations and update the parameters, Adam optimizer [?] was used with a learning rate of <span class="math inline">\(\eta=10^{-4}\)</span> and no weight decay. The default PyTorch’s values for the other hyperparameters were left untouched: <span class="math inline">\(\beta_1=.9\)</span>, <span class="math inline">\(\beta_2=.999\)</span> and <span class="math inline">\(\epsilon=10^{-8}\)</span>.</p>
+<p>[?] <a href="https://arxiv.org/abs/1412.6980">Adam: A Method for Stochastic Optimization</a>, Diederik P. Kingma, Jimmy Ba (2014)</p>
+<p>[?] <a href="https://arxiv.org/abs/1805.07290">Learning 3D Shape Completion under Weak Supervision</a>, Stutz et al. (2018)</p>
+<h2 id="single-view-image-reconstruction"><span class="header-section-number">3.2</span> Single View Image Reconstruction</h2>
+<p>Before talking about the encoder, we need the definition bellow.</p>
+<p><strong>Definition (ImageNet normalization)</strong> Let <span class="math inline">\(x \in [0,1]^{w \times h \times 3}\)</span> be a colored image, <span class="math inline">\(\mathrm{\mu_{ImN}} :=( .485,\, .456,\, .406)\)</span> and <span class="math inline">\(\mathrm{\sigma_{ImN}}:= (.229,\, .224, \, .225)\)</span>. Then the <em>normalized</em> image is then given by</p>
+<p><span class="math display">\[
+\hat{x}_{ij} = \frac{x_{ij} - \mu_{ImN}}{\sigma_{ImN}},
+\]</span> in which the division is piecewise.</p>
+<p><span class="math inline">\(\blacksquare\)</span></p>
+<h3 id="the-image-encoder"><span class="header-section-number">3.2.1</span> The Image Encoder</h3>
+<figure>
+<img src="img/svi_encoder.svg" style="width:100.0%" alt="" /><figcaption><strong>Figure 2</strong> Modified ResNet18 - the image encoder.</figcaption>
+</figure>
+<p><strong>Input</strong> <span class="math inline">\(224 \times 224\)</span> image, normalized according to ImageNet standards.</p>
+<p><strong>Output</strong> A feature vector <span class="math inline">\(c \in \mathbb{R}^C\)</span>, for <span class="math inline">\(C=256\)</span>.</p>
+<p><strong>Evaluation</strong> The only difference between ResNet18 [3] and the neural network used as the encoder is the last fully connected layer. Instead of producing a 512-dim output, the last layer projects it down to a 256-dim vector <span class="math inline">\(c\)</span>. The encoder was pre-trained on the ImageNet dataset.</p>
+<p>[3] <a href="https://arxiv.org/abs/1512.03385">Deep Residual Learning for Image Recognition</a>, Kaiming He et al. (2015)</p>
+<p>The reference above is a landmark of sorts for its area - hence the large number of citations. They introduced the idea of using residues to make deep neural networks viable.</p>
+<p>One eye-catching piece of information is that the authors of ONet (see <code>im2mesh/encoder/conv.py</code>) did implement several sizes of ResNets: 18, 34, 50 and 101. Since this particular encoder was pre-trained, it raises the question of why ResNet18 worked better than its deeper counterparts.</p>
+<h2 id="point-cloud-completion"><span class="header-section-number">3.3</span> Point Cloud Completion</h2>
+<figure>
+<img src="img/psgn_encoder.svg" style="width:100.0%" alt="" /><figcaption><strong>Figure 3</strong> Encoder for point cloud completion.</figcaption>
+</figure>
+<p><strong>Input</strong> M=300 points generated from a watertight mesh taken from ShapeNet in the following manner:</p>
+<ol type="1">
+<li>Make sure the mesh is watertight with code provided by Stutz et al. [?];</li>
+<li>Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;</li>
+<li>Sample 300 points from the <em>surface</em> of the model;</li>
+<li>Apply noise to the points using a Gaussian distribution with zero mean and standard deviation of 0.05 (see <code>im2mesh/data/transforms.py</code>);</li>
+</ol>
+<p><strong>Output</strong> A feature vector <span class="math inline">\(c \in \mathbb{R}^{C}\)</span>, for <span class="math inline">\(C=512\)</span>.</p>
+<p><strong>Description</strong> The network consists of 2 fully connected layers (for input and output) and 5 <em>PointNet ResNet-blocks</em> intercalated by pooling+expansion layers, as shown in Figure 3.</p>
+<p><strong>Note</strong> In the supplementary there’s no distinction between <em>PointNet ResNet-blocks</em> and ONet ones. In the source code they’re completely different (see <code>im2mesh/layers.py</code> and <code>./im2mesh/encoder/pointnet.py</code>).</p>
+<p>We can find a legacy definition of the ONet architecture, and in this version both used the same simplified ResNet-block defined bellow. This might explain the inaccuracies in the PDFs. Without further ado, let us present the definition from the source code:</p>
+<p><strong>Definition (PointNet ResNet-block)</strong> The class used to represent the <em>PointNet ResNet-blocks</em> is the following (see <code>im2mesh/layers.py</code> and <code>./im2mesh/encoder/pointnet.py</code>):</p>
+<pre><code># Resnet Blocks
+class ResnetBlockFC(nn.Module):
+    &#39;&#39;&#39; Fully connected ResNet Block class.
+
+    Args:
+        size_in (int): input dimension
+        size_out (int): output dimension
+        size_h (int): hidden dimension
+    &#39;&#39;&#39;</code></pre>
+<p>For <em>PointNet ResNet-blocks</em>: <code>size_in=1024</code>, <code>size_out=512</code> and <code>size_h=512</code>. Therefore one block is defined as the following composition, in order of application:</p>
+<ol type="1">
+<li>Fully connected NN - 1024-dim to 512-dim;</li>
+<li>Fully connected NN - 512-dim to 512-dim;</li>
+<li>ReLU activation layer;</li>
+</ol>
+<p>Since the input and output dimensions differ, we have an additional FCNN projecting the input for step 1 (1024-dim) to <span class="math inline">\(x_s\)</span> (512-dim). Hence the final output is the sum of the output from step 3 and <span class="math inline">\(x_s\)</span>.</p>
+<p><span class="math inline">\(\blacksquare\)</span></p>
+<h2 id="voxel-super-resolution"><span class="header-section-number">3.4</span> Voxel Super Resolution</h2>
+<figure>
+<img src="img/voxel_encoder.svg" alt="" /><figcaption><strong>Figure 4</strong> Encoder for voxel super resolution.</figcaption>
+</figure>
+<p><strong>Input</strong> A grid of <span class="math inline">\(32^3\)</span> voxels. More specifically, voxels generated from (watertight) ShapeNet meshes with the algorithm bellow:</p>
+<ol type="1">
+<li>Normalize and make the shape watertight using the methods described previously;</li>
+<li>Mark all voxels that intercept the model’s surface as occupied;</li>
+<li>For each of the remaining voxels:
+<ul>
+<li>Choose 1 random point inside the voxel;</li>
+<li>If the point lies inside the mesh mark the corresponding voxel as occupied;</li>
+</ul></li>
+</ol>
+<p><strong>Output</strong> A feature vector <span class="math inline">\(c \in \mathbb{R}^C\)</span>, for <span class="math inline">\(C=256\)</span>.</p>
+<p><strong>Evaluation</strong> The input passes trough 5 3D convolution layers, and a fully connected layer to project the output to the space <span class="math inline">\(\mathbb{R}^{256}\)</span>. All convolution layers use <em>zero-padding</em> with size 1 and <span class="math inline">\(3\times 3\times 3\)</span> filters (see <code>im2mesh/encoder/voxels.py</code>). Stride is implicitly defined in Fig [4].</p>
+<h2 id="unconditional-mesh-generation"><span class="header-section-number">3.5</span> Unconditional Mesh Generation</h2>
+<p>We’ll talk about the implementation before long, but before that I’d like to present a general idea of the process to the reader. Although the authors did use the word <em>unsupervised</em> in the article, it wasn’t the most descriptive choice - let me explain why:</p>
+<p>Suppose that we want to generate shapes in the category <em>car</em>, we would proceed as follows:</p>
+<ol type="1">
+<li>Take the annotated meshes from ShapeNet and extract the subset of shapes that correspond to our chosen category;</li>
+<li>Train a Variational Autoencoder using this subset;</li>
+<li>Sample the latent space and use the decoder to generate new shapes;</li>
+</ol>
+<p>A more appropriate label would be <em>semi-supervised</em>, since we’re both using the labels extract subsets in a <em>supervised</em> fashion and learning about the distributions of these subsets in an <em>unsupervised</em> manner.</p>
+<h3 id="the-encoder"><span class="header-section-number">3.5.1</span> The Encoder</h3>
+<p>Preceding the low level definition, it’s a good idea to keep in mind a high level model of what we’re trying to achieve. The busy reader skip this section by jumping directly to the definition of <em>encoder latent</em>.</p>
+<p>Traditional learning-based autoencoders are usually defined as two neural networks:</p>
+<p><span class="math display">\[
+    E_\psi: X \to Z
+\]</span></p>
+<p><span class="math display">\[
+    D_\theta: Z \to X
+\]</span></p>
+<p>One called the encoder, that takes the input <span class="math inline">\(x \in X\)</span> and maps it to a smaller dimensional latent space <span class="math inline">\(Z\)</span>; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in <span class="math inline">\(Z\)</span>.</p>
+<p>Given a set o inputs <span class="math inline">\(B = \{x_1, \cdots ,x_N\} \in X\)</span>, we can define a loss function</p>
+<p><span class="math display">\[
+    \mathcal{L}_B(\theta, \psi) 
+= 
+    \frac{1}{N} \sum_{i=1}^N 
+    \Big[
+        \mathcal{L}\big(D_\theta(E_\psi(x_i)), x_i\big)
+    \Big],
+\]</span></p>
+<p>that just compares each input <span class="math inline">\(x_i\)</span> to its encoded and decoded counterpart <span class="math inline">\(\tilde x_i = D_\theta(E_\psi(x_i))\)</span>. Using <span class="math inline">\(\mathcal{L}\)</span>, we can just train the two neural networks to optimize the compression, which is an <em>unsupervised</em> training scheme because no labeling is required for the inputs <span class="math inline">\(B\)</span>.</p>
+<p>To generate new plausible entries for the input space <span class="math inline">\(X\)</span>, a naive approach would be to simply take random points <span class="math inline">\(z \in Z\)</span> or in an open cover <span class="math inline">\(\tilde Z \subset Z\)</span> for <span class="math inline">\(E_\psi(B)\)</span> and store <span class="math inline">\(D_\theta(z)\)</span> for those random points. Unfortunately this doesn’t work for traditional learn-based autoencoders because <span class="math inline">\(D_\theta\)</span>, in general, isn’t a stable function, ie,</p>
+<p><span class="math display">\[
+    \newcommand{\notimplies}{\;\not\!\!\!\implies}
+    \big| z - E_\psi(x_i) \big|\text{ is small} \notimplies \mathcal{L}(D_\theta(z), x_i) \text{ is small}.
+\]</span></p>
+<p>To solve this problem and regularize the latent space, we can modify our encoder to produce a probability distribution. Instead of mapping <span class="math inline">\(x0 \in X\)</span> to a single point <span class="math inline">\(z0 \in Z\)</span> as a traditional encoder, a variational encoder does the following</p>
+<p><span class="math display">\[
+    g_\psi(x0) = q_\psi(z | x0) \in P(Z),
+\]</span></p>
+<p>in which <span class="math inline">\(P(Z)\)</span> is the space of probability measures on <span class="math inline">\(Z\)</span>. To use this new encoder, we can define a new loss function:</p>
+<p><span class="math display">\[
+    \mathcal{L}&#39;_B(\theta, \psi) 
+= 
+    \frac{1}{N} \sum_{i=1}^N 
+    \Big[
+         \mathcal{L}\big(D_\theta(\tilde z_i), x_i\big)
+         +
+        \mathcal{L}_P\big(q_\psi(x_i), \mathcal{N}(0,1)\big)
+    \Big],
+\]</span></p>
+<p>in which</p>
+<p><span class="math display">\[
+    \tilde z_i\text{ is a single random sample from } g_\psi(x_i)
+\]</span></p>
+<p><span class="math display">\[
+    \mathcal{L}_P \text{ is a loss function for two probabilities in }P(Z)
+\]</span></p>
+<p>Naturally, one can tweak the stochastic loss function <span class="math inline">\(\mathcal{L}&#39;_B\)</span> by using different sampling schemes or different arguments for <span class="math inline">\(\mathcal{L}_P\)</span>, but this example encapsulates the basic idea of <em>variational autoencoders</em> or VACs for short.</p>
+<p><strong>Definition (Encoder latent)</strong> Let <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> be a sequence of <span class="math inline">\(K\)</span> positions in 3D space and <span class="math inline">\(o_i \in \{0, 1\}\)</span> be their corresponding ground truth <em>occupancies</em>. The encoder</p>
+<p><span class="math display">\[
+    g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
+\]</span></p>
+<p>takes the points and their occupancies and maps them to values in <span class="math inline">\(\mathbb{R}^L\)</span> that represent respectively the average and the standard deviation of a Gaussian distribution <span class="math inline">\(q_\psi(z |(p_i, p_i)_{i=1:K})\)</span> in the latent space <span class="math inline">\(\mathbb{R}^L\)</span>.</p>
+<p>The key idea is to construct an autoencoder that maps shapes to a distribution in the latent space, instead of a single point.</p>
+<p>We optimize a lower bound  to the negative log-likelihood of the generative model <span class="math inline">\(p((o_{ij})_{j=1:K} | (p_{ij})_{j=1:K})\)</span>: <span class="math display">\[
+    \mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
+= 
+    \frac{1}{|\mathcal{B}|}  \sum_{i=1}^{|\mathcal{B}|} 
+    \left[
+        \sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},z_i), o_{ij}\right)
+        + \mathrm{KL} \left(q_\psi(z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, p_0(z) \right)
+    \right]
+\]</span> where <span class="math inline">\(\mathrm{KL}\)</span> denotes the KL-divergence, <span class="math inline">\(p_0(z)\)</span> is a prior distribution on the latent variable <span class="math inline">\(z_i\)</span> and <span class="math inline">\(z_i\)</span> is sampled according to <span class="math inline">\(q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})\)</span>.</p>
+<p><span class="math inline">\(\blacksquare\)</span></p>
+</body>
+</html>
