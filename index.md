@@ -371,7 +371,7 @@ Voxel Super Resolution
 Unconditional Mesh Generation
 -------------------------------
 
-We'll talk about the implementation before long, but before that I'd like to present a general idea of the process to the reader. Although the authors did use the word *unsupervised* in the article, it's a bit of a stretch - let me explain why:
+We'll talk about the implementation before long, but before that I'd like to present a general idea of the process to the reader. Although the authors did use the word *unsupervised* in the article, it wasn't the most descriptive choice - let me explain why:
 
 Suppose that we want to generate shapes in the category *car*, we would proceed as follows: 
 
@@ -382,7 +382,43 @@ Suppose that we want to generate shapes in the category *car*, we would proceed 
 A more appropriate label would be *semi-supervised*, since we're both using the labels extract subsets in a *supervised* fashion and learning about the distributions of these subsets in an *unsupervised* manner.
 
 
-### Abstract Ideas 
+###  The Encoder
+
+Preceding the low level definition, it's a good idea to keep in mind a high level model of what we're trying to achieve. The busy reader skip this section by jumping directly to the definition of *encoder latent*.
+
+Traditional learning-based autoencoders are usually defined as two neural networks:
+
+$$
+	E_\psi: X \to Z
+$$
+
+$$
+	D_\theta: Z \to X
+$$
+
+One called the encoder, that takes the input $x \in X$ and maps it to a smaller dimensional latent space $Z$; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in  $Z$.
+
+Given a set o inputs $B = \{x_1, \cdots ,x_N\} \in X$, we can define a loss function
+
+$$
+	\mathcal{L}_B(\theta, \psi) 
+= 
+	\frac{1}{N} \sum_{i=1}^N 
+	\Big[
+		\mathcal{L}\big(D_\theta(E_\psi(x_i)), x_i\big)
+	\Big],
+$$
+
+that just compares each input $x_i$ to its encoded and decoded counterpart $\tilde x_i = D_\theta(E_\psi(x_i))$. Using $\mathcal{L}$, we can just train the two neural networks to optimize the compression, which is an *unsupervised* training scheme because no labeling is required for the inputs $B$.
+
+To generate new plausible entries for the input space $X$, a naive approach would be to simply take random points $z \in Z$ or in an open cover $\tilde Z \subset Z$ for $E_\psi(B)$ and store $D_\theta(z)$ for those random points. Unfortunately the former doesn't work for traditional learn-based autoencoders because $D_\theta$, in general, isn't a stable function, ie, 
+
+$$
+	\newcommand{\notimplies}{\;\not\!\!\!\implies}
+	\big| z - E_\psi(x_i) \big|\text{ is small} \notimplies \mathcal{L}(D_\theta(z), x_i) \text{ is small}.
+$$
+
+
 
 **Definition (Encoder latent)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
 
