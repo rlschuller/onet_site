@@ -447,9 +447,9 @@ $$
 	\mathcal{L}_P \text{ is a loss function for two probabilities in }P(Z)
 $$
 
-Naturally, one can tweak the stochastic loss function $\mathcal{L}'_B$ by using different sampling schemes or different arguments for $\mathcal{L}_P$, but this example encapsulates the basic idea of *variational autoencoders* or VACs for short.
+Naturally, one can tweak the stochastic loss function $\mathcal{L}'_B$ by using different sampling schemes or different arguments for $\mathcal{L}_P$, but this example encapsulates the basic idea of a *variational autoencoder* - VAC for short.
 
-**Definition (Encoder latent)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
+**Definition (Variational encoder)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
 
 $$
 	g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
@@ -457,20 +457,34 @@ $$
 
 takes the points and their occupancies and maps them to values in $\mathbb{R}^L$ that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, p_i)_{i=1:K})$ in the latent space $\mathbb{R}^L$.
 
+$blacksquare$
 
-The key idea is to construct an autoencoder that maps shapes to a distribution in the latent space, instead of a single point. 
+**Definition (Variational loss function)** The loss function is given by:
 
-We optimize a lower bound \cite{Kingma2014ICLR,Rezende2014ICML,Garnelo2018ARXIV} to the negative log-likelihood of the generative model $p((o_{ij})_{j=1:K} | (p_{ij})_{j=1:K})$:
 $$
 	\mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
 = 
 	\frac{1}{|\mathcal{B}|}  \sum_{i=1}^{|\mathcal{B}|} 
 	\left[
 		\sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},z_i), o_{ij}\right)
-		+ \mathrm{KL} \left(q_\psi(z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, p_0(z) \right)
+		+ \mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
 	\right]
 $$
-where $\mathrm{KL}$ denotes the KL-divergence, $p_0(z)$ is a prior distribution on the latent variable $z_i$ and $z_i$ is sampled according to  $q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})$.
 
+in which $\mathrm{KL}$ denotes the KL-divergence  and $\tilde z_i \in Z$ is a single random sample from the probability distribution given by the encoder: $q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})$.
+
+More info about the KL-divergence and its interpretations can be found [here](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence). For us, the important thing is that it's a loss function between probability distributions whose formula (in our specific case) simplifies to
+
+$$
+\mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
+=
+	\frac{1}{2}
+	\sum_{i=1}^L
+	\left(
+		\sigma_i^2 + \mu_i^2 - \ln(\sigma_i^2)-1)
+	\right)
+$$
+
+[?]
 
 $\blacksquare$
