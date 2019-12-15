@@ -13,7 +13,7 @@
       div.column{display: inline-block; vertical-align: top; width: 50%;}
   </style>
   <link rel="stylesheet" href="pandoc.css" />
-  <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" ltype="text/javascript"></script>
+  <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
 </head>
 <body>
 <header>
@@ -48,6 +48,7 @@
 <li><a href="#voxel-super-resolution"><span class="toc-section-number">3.4</span> Voxel Super Resolution</a></li>
 <li><a href="#unconditional-mesh-generation"><span class="toc-section-number">3.5</span> Unconditional Mesh Generation</a><ul>
 <li><a href="#the-encoder"><span class="toc-section-number">3.5.1</span> The Encoder</a></li>
+<li><a href="#the-loss-function"><span class="toc-section-number">3.5.2</span> The loss function</a></li>
 </ul></li>
 </ul></li>
 </ul>
@@ -351,8 +352,9 @@ class ResnetBlockFC(nn.Module):
     g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
 \]</span></p>
 <p>takes the points and their occupancies and maps them to values in <span class="math inline">\(\mathbb{R}^L\)</span> that represent respectively the average and the standard deviation of a Gaussian distribution <span class="math inline">\(q_\psi(z |(p_i, p_i)_{i=1:K})\)</span> in the latent space <span class="math inline">\(\mathbb{R}^L\)</span>.</p>
-<p><span class="math inline">\(blacksquare\)</span></p>
-<p><strong>Definition (Variational loss function)</strong> The loss function is given by:</p>
+<p><span class="math inline">\(\blacksquare\)</span></p>
+<h3 id="the-loss-function"><span class="header-section-number">3.5.2</span> The loss function</h3>
+<p>The variational loss function is given by:</p>
 <p><span class="math display">\[
     \mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
 = 
@@ -363,7 +365,7 @@ class ResnetBlockFC(nn.Module):
     \right]
 \]</span></p>
 <p>in which <span class="math inline">\(\mathrm{KL}\)</span> denotes the KL-divergence and <span class="math inline">\(\tilde z_i \in Z\)</span> is a single random sample from the probability distribution given by the encoder: <span class="math inline">\(q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})\)</span>.</p>
-<p>More info about the KL-divergence and its interpretations can be found <a href="https://en.wikipedia.org/wiki/Kullback-Leibler_divergence">here</a>. For us, the important thing is that it’s a loss function between probability distributions whose formula (in our specific case) simplifies to</p>
+<p>More info about the KL-divergence and its interpretations can be found <a href="https://en.wikipedia.org/wiki/Kullback-Leibler_divergence">here</a>. For us, the important thing is that it’s a loss function between probability distributions whose formula simplifies to</p>
 <p><span class="math display">\[
 \mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
 =
@@ -371,9 +373,8 @@ class ResnetBlockFC(nn.Module):
     \sum_{i=1}^L
     \left(
         \sigma_i^2 + \mu_i^2 - \ln(\sigma_i^2)-1)
-    \right)
+    \right).
 \]</span></p>
-<p>[?]</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
 </body>
 </html>

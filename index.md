@@ -457,9 +457,11 @@ $$
 
 takes the points and their occupancies and maps them to values in $\mathbb{R}^L$ that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, p_i)_{i=1:K})$ in the latent space $\mathbb{R}^L$.
 
-$blacksquare$
+$\blacksquare$
 
-**Definition (Variational loss function)** The loss function is given by:
+### The loss function
+
+The variational loss function is given by:
 
 $$
 	\mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
@@ -473,7 +475,7 @@ $$
 
 in which $\mathrm{KL}$ denotes the KL-divergence  and $\tilde z_i \in Z$ is a single random sample from the probability distribution given by the encoder: $q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})$.
 
-More info about the KL-divergence and its interpretations can be found [here](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence). For us, the important thing is that it's a loss function between probability distributions whose formula (in our specific case) simplifies to
+More info about the KL-divergence and its interpretations can be found [here](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence). For us, the important thing is that it's a loss function between probability distributions whose formula simplifies to
 
 $$
 \mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
@@ -482,9 +484,7 @@ $$
 	\sum_{i=1}^L
 	\left(
 		\sigma_i^2 + \mu_i^2 - \ln(\sigma_i^2)-1)
-	\right)
+	\right).
 $$
-
-[?]
 
 $\blacksquare$
