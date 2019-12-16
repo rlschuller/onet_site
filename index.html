@@ -42,13 +42,15 @@
 <li><a href="#training-and-the-loss-function"><span class="toc-section-number">3.1.6</span> Training And The Loss Function</a></li>
 </ul></li>
 <li><a href="#single-view-image-reconstruction"><span class="toc-section-number">3.2</span> Single View Image Reconstruction</a><ul>
-<li><a href="#the-image-encoder"><span class="toc-section-number">3.2.1</span> The Image Encoder</a></li>
+<li><a href="#image-encoder"><span class="toc-section-number">3.2.1</span> Image Encoder</a></li>
 </ul></li>
 <li><a href="#point-cloud-completion"><span class="toc-section-number">3.3</span> Point Cloud Completion</a></li>
 <li><a href="#voxel-super-resolution"><span class="toc-section-number">3.4</span> Voxel Super Resolution</a></li>
 <li><a href="#unconditional-mesh-generation"><span class="toc-section-number">3.5</span> Unconditional Mesh Generation</a><ul>
-<li><a href="#the-encoder"><span class="toc-section-number">3.5.1</span> The Encoder</a></li>
-<li><a href="#the-loss-function"><span class="toc-section-number">3.5.2</span> The loss function</a></li>
+<li><a href="#variational-encoder---abstract-definition"><span class="toc-section-number">3.5.1</span> Variational Encoder - Abstract Definition</a></li>
+<li><a href="#variational-loss-function"><span class="toc-section-number">3.5.2</span> Variational Loss Function</a></li>
+<li><a href="#variational-decoder---architecture"><span class="toc-section-number">3.5.3</span> Variational Decoder - Architecture</a></li>
+<li><a href="#variational-encoder---architecture"><span class="toc-section-number">3.5.4</span> Variational Encoder - Architecture</a></li>
 </ul></li>
 </ul></li>
 </ul>
@@ -98,10 +100,12 @@
 <h1 id="the-devil-is-in-the-details"><span class="header-section-number">3</span> The Devil is in The Details</h1>
 <p>Using the abstract definition, the authors presented solutions for 4 different problems. In order to set apart the common definitions from the specificities of each problem, this section is divided in 5 subsections.</p>
 <p>Besides the expected lack of complete coverage of all implementation nuances, a few inconsistencies were found in the article and in the supplementary material. The source code was an important settler for the questions that arouse during my readings, so we’ll adopt the following typographical convention:</p>
-<p>(see <code>path_to_a_file</code>) refers to a file in <a href="https://github.com/autonomousvision/occupancy_networks" class="uri">https://github.com/autonomousvision/occupancy_networks</a></p>
+<p>(see <code>path_to_a_file</code>) refers to a file in <a href="https://github.com/autonomousvision/occupancy_networks" class="uri">https://github.com/autonomousvision/occupancy_networks</a>.</p>
 <h2 id="common"><span class="header-section-number">3.1</span> Common</h2>
 <h3 id="onet-architecture---the-big-picture"><span class="header-section-number">3.1.1</span> ONet Architecture - The Big Picture</h3>
-<p>In all experiments, the same base architecture was employed:</p>
+<p>According to the supplementary material (sec 1.1 Architectures): “We employ the same occupancy network architecture (Fig. 1) in all experiments”. By studying the source code, one can see that this statement isn’t accurate, since it does not generalize to the <em>unconditional mesh generation</em> experiment.</p>
+<p>For the other 3 experiments, the original assertive is correct. With these particularities in mind, we propose the following naming scheme: ONet architecture will be reserved for the architecture described in this section, and the decoder for unconditional mesh generation will be denoted variational decoder.</p>
+<p>Naturally, the utterances in the former two paragraphs are quite strong and require reasonable justification. This will be presented in the <a href="#unconditional-mesh-generation">Unconditional Mesh Generation</a> section.</p>
 <figure>
 <img src="img/common_arch.svg" alt="Figure 1 Architecture of the Occupancy Network." style="width:80.0%" /><figcaption><strong>Figure 1</strong> Architecture of the <em>Occupancy Network</em>.</figcaption>
 </figure>
@@ -154,10 +158,10 @@
 <p>We’ll now describe a single ONet ResNet-block (see <code>im2mesh/layers.py - class CResnetBlockConv1d</code>) as the composition of previously defined components, in the order of application:</p>
 <ol type="1">
 <li>CBN layer;</li>
-<li>ReLU activation function in each dimension;</li>
+<li>ReLU activation function;</li>
 <li>Fully-connected layer;</li>
 <li>CBN layer;</li>
-<li>ReLU activation function in each dimension;</li>
+<li>ReLU activation function;</li>
 <li>Fully-connected layer;</li>
 </ol>
 <p>To get the output of the ONet ResNet-block, we then sum the input of step 1 to the output of step 6.</p>
@@ -231,7 +235,7 @@
 \hat{x}_{ij} = \frac{x_{ij} - \mu_{ImN}}{\sigma_{ImN}},
 \]</span> in which the division is piecewise.</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
-<h3 id="the-image-encoder"><span class="header-section-number">3.2.1</span> The Image Encoder</h3>
+<h3 id="image-encoder"><span class="header-section-number">3.2.1</span> Image Encoder</h3>
 <figure>
 <img src="img/svi_encoder.svg" alt="Figure 2 Modified ResNet18 - the image encoder." style="width:100.0%" /><figcaption><strong>Figure 2</strong> Modified ResNet18 - the image encoder.</figcaption>
 </figure>
@@ -268,11 +272,13 @@ class ResnetBlockFC(nn.Module):
     &#39;&#39;&#39;</code></pre>
 <p>For <em>PointNet ResNet-blocks</em>: <code>size_in=1024</code>, <code>size_out=512</code> and <code>size_h=512</code>. Therefore one block is defined as the following composition, in order of application:</p>
 <ol type="1">
+<li>ReLU activation layer (1024-dim);</li>
 <li>Fully connected NN - 1024-dim to 512-dim;</li>
+<li>ReLU activation layer (512-dim);</li>
 <li>Fully connected NN - 512-dim to 512-dim;</li>
-<li>ReLU activation layer;</li>
 </ol>
-<p>Since the input and output dimensions differ, we have an additional FCNN projecting the input for step 1 (1024-dim) to <span class="math inline">\(x_s\)</span> (512-dim). Hence the final output is the sum of the output from step 3 and <span class="math inline">\(x_s\)</span>.</p>
+<p>Since the input and output dimensions differ, we have an additional FCNN projecting the input for step 1 (1024-dim) to <span class="math inline">\(x_s\)</span> (512-dim). Hence the final output is the sum of the output from step 4 and <span class="math inline">\(x_s\)</span>.</p>
+<p>Note that this block can be described as an ONet ResNet-block without the CBN layers and with different dimensions.</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
 <h2 id="voxel-super-resolution"><span class="header-section-number">3.4</span> Voxel Super Resolution</h2>
 <figure>
@@ -298,9 +304,9 @@ class ResnetBlockFC(nn.Module):
 <li>Train a Variational Autoencoder using this subset;</li>
 <li>Sample the latent space and use the decoder to generate new shapes;</li>
 </ol>
-<p>A more appropriate label would be <em>semi-supervised</em>, since we’re both using the labels extract subsets in a <em>supervised</em> fashion and learning about the distributions of these subsets in an <em>unsupervised</em> manner.</p>
-<h3 id="the-encoder"><span class="header-section-number">3.5.1</span> The Encoder</h3>
-<p>Preceding the low level definition, it’s a good idea to keep in mind a high level model of what we’re trying to achieve. The busy reader skip this section by jumping directly to the definition of <em>encoder latent</em>.</p>
+<p>A more appropriate label would be <em>semi-supervised</em>, since we’re both using the labels to extract subsets in a <em>supervised</em> fashion and learning about the distributions of these subsets in an <em>unsupervised</em> manner.</p>
+<h3 id="variational-encoder---abstract-definition"><span class="header-section-number">3.5.1</span> Variational Encoder - Abstract Definition</h3>
+<p>Preceding the low level definition, it’s a good idea to keep in mind a high level model of what we’re trying to achieve. The busy reader can skip this section by jumping directly to the definition of <em>encoder latent</em>.</p>
 <p>Traditional learning-based autoencoders are usually defined as two neural networks:</p>
 <p><span class="math display">\[
     E_\psi: X \to Z
@@ -308,8 +314,8 @@ class ResnetBlockFC(nn.Module):
 <p><span class="math display">\[
     D_\theta: Z \to X
 \]</span></p>
-<p>One called the encoder, that takes the input <span class="math inline">\(x \in X\)</span> and maps it to a smaller dimensional latent space <span class="math inline">\(Z\)</span>; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in <span class="math inline">\(Z\)</span>.</p>
-<p>Given a set o inputs <span class="math inline">\(B = \{x_1, \cdots ,x_N\} \in X\)</span>, we can define a loss function</p>
+<p>One called the encoder, that takes the input <span class="math inline">\(x \in X\)</span> and maps it to a dimensionally smaller latent space <span class="math inline">\(Z\)</span>; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in <span class="math inline">\(Z\)</span>.</p>
+<p>Given a set of inputs <span class="math inline">\(B = \{x_1, \cdots ,x_N\} \in X\)</span>, we can define a loss function</p>
 <p><span class="math display">\[
     \mathcal{L}_B(\theta, \psi) 
 = 
@@ -328,7 +334,8 @@ class ResnetBlockFC(nn.Module):
 <p><span class="math display">\[
     g_\psi(x0) = q_\psi(z | x0) \in P(Z),
 \]</span></p>
-<p>in which <span class="math inline">\(P(Z)\)</span> is the space of probability measures on <span class="math inline">\(Z\)</span>. To use this new encoder, we can define a new loss function:</p>
+<p>in which <span class="math inline">\(P(Z)\)</span> is the space of probability measures on <span class="math inline">\(Z\)</span>.</p>
+<p>To use this new encoder, we can define a new loss function:</p>
 <p><span class="math display">\[
     \mathcal{L}&#39;_B(\theta, \psi) 
 = 
@@ -336,7 +343,7 @@ class ResnetBlockFC(nn.Module):
     \Big[
          \mathcal{L}\big(D_\theta(\tilde z_i), x_i\big)
          +
-        \mathcal{L}_P\big(q_\psi(x_i), \mathcal{N}(0,1)\big)
+        \mathcal{L}_P\big(g_\psi(x_i), \mathcal{N}(0,1)\big)
     \Big],
 \]</span></p>
 <p>in which</p>
@@ -347,27 +354,29 @@ class ResnetBlockFC(nn.Module):
     \mathcal{L}_P \text{ is a loss function for two probabilities in }P(Z)
 \]</span></p>
 <p>Naturally, one can tweak the stochastic loss function <span class="math inline">\(\mathcal{L}&#39;_B\)</span> by using different sampling schemes or different arguments for <span class="math inline">\(\mathcal{L}_P\)</span>, but this example encapsulates the basic idea of a <em>variational autoencoder</em> - VAC for short.</p>
-<p><strong>Definition (Variational encoder)</strong> Let <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> be a sequence of <span class="math inline">\(K\)</span> positions in 3D space and <span class="math inline">\(o_i \in \{0, 1\}\)</span> be their corresponding ground truth <em>occupancies</em>. The encoder</p>
+<p>Since this changes force the latent space to be more regular, one can generate new plausible outputs by taking random <span class="math inline">\(z \in Z\)</span> according to the standard normal distribution or by performing interpolations in the latent space for example.</p>
+<p><strong>Definition (Encoder latent)</strong> Let <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> be a sequence of <span class="math inline">\(K = 2048\)</span> positions in 3D space and <span class="math inline">\(o_i \in \{0, 1\}\)</span> be their corresponding ground truth <em>occupancies</em>. The encoder</p>
 <p><span class="math display">\[
     g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
 \]</span></p>
-<p>takes the points and their occupancies and maps them to values in <span class="math inline">\(\mathbb{R}^L\)</span> that represent respectively the average and the standard deviation of a Gaussian distribution <span class="math inline">\(q_\psi(z |(p_i, p_i)_{i=1:K})\)</span> in the latent space <span class="math inline">\(\mathbb{R}^L\)</span>.</p>
+<p>takes the points and their occupancies and maps them to a pair of values in <span class="math inline">\(\mathbb{R}^L\)</span>, for <span class="math inline">\(L=128\)</span>, that represent respectively the average and the standard deviation of a Gaussian distribution <span class="math inline">\(q_\psi(z |(p_i, p_i)_{i=1:K}) =\mathcal{N}(\mu_\psi, \sigma_\psi)\)</span> in the latent space <span class="math inline">\(\mathbb{R}^L\)</span>.</p>
+<p>Just as a side note, the labeling <em>encoder latent</em> isn’t a hallucination: it’s the name given in the source code (see <code>im2mesh/onet/models/encoder_latent.py</code>) and in the configuration files (see <code>configs/unconditional/*.yaml</code>).</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
-<h3 id="the-loss-function"><span class="header-section-number">3.5.2</span> The loss function</h3>
-<p>The variational loss function is given by:</p>
+<h3 id="variational-loss-function"><span class="header-section-number">3.5.2</span> Variational Loss Function</h3>
+<p>The variational version of the loss function is given by:</p>
 <p><span class="math display">\[
     \mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
 = 
     \frac{1}{|\mathcal{B}|}  \sum_{i=1}^{|\mathcal{B}|} 
     \left[
-        \sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},z_i), o_{ij}\right)
-        + \mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
+        \sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},\tilde z_i), o_{ij}\right)
+        + \mathrm{KL} \left(\mathcal{N}(\mu_\psi, \sigma_\psi)\,\|\, \mathcal{N}(0,1) \right)
     \right]
 \]</span></p>
-<p>in which <span class="math inline">\(\mathrm{KL}\)</span> denotes the KL-divergence and <span class="math inline">\(\tilde z_i \in Z\)</span> is a single random sample from the probability distribution given by the encoder: <span class="math inline">\(q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})\)</span>.</p>
+<p>in which <span class="math inline">\(\mathcal{L}\)</span> is the loss function defined <a href="#training-and-the-loss-function">earlier</a>, <span class="math inline">\(\mathrm{KL}\)</span> denotes the KL-divergence and <span class="math inline">\(\tilde z_i \in \mathbb{R}^L\)</span> is a single random sample from the probability distribution given by the encoder: <span class="math inline">\(\mathcal{N}(\mu_\psi, \sigma_\psi)\)</span>.</p>
 <p>More info about the KL-divergence and its interpretations can be found <a href="https://en.wikipedia.org/wiki/Kullback-Leibler_divergence">here</a>. For us, the important thing is that it’s a loss function between probability distributions whose formula simplifies to</p>
 <p><span class="math display">\[
-\mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
+    \mathrm{KL} \left(\mathcal{N}(\mu, \sigma) \,\|\, \mathcal{N}(0,1) \right)
 =
     \frac{1}{2}
     \sum_{i=1}^L
@@ -375,6 +384,40 @@ class ResnetBlockFC(nn.Module):
         \sigma_i^2 + \mu_i^2 - \ln(\sigma_i^2)-1)
     \right).
 \]</span></p>
+<h3 id="variational-decoder---architecture"><span class="header-section-number">3.5.3</span> Variational Decoder - Architecture</h3>
+<p>As we said before, the architecture for this decoder and ONet’s one aren’t the same. In the configuration files (see <code>configs/unconditional/*.yaml</code>) it’s clear that the <code>simple</code> decoder was used. The dictionary for ONet decoders (see <code>im2mesh/onet/models/__init__.py</code>) defines the following:</p>
+<pre><code># Decoder dictionary
+decoder_dict = {
+    &#39;simple&#39;: decoder.Decoder,
+    &#39;cbatchnorm&#39;: decoder.DecoderCBatchNorm,
+    &#39;cbatchnorm2&#39;: decoder.DecoderCBatchNorm2,
+    &#39;batchnorm&#39;: decoder.DecoderBatchNorm,
+    &#39;cbatchnorm_noresnet&#39;: decoder.DecoderCBatchNormNoResnet,
+}</code></pre>
+<p>Hence, the class that defines the <code>simple</code> decoder is <code>decoder.Decoder</code>.</p>
+<p>Another important observation is that the optional entry <code>model:decoder_kwargs</code> isn’t defined in the <code>unconditional</code> configuration files, which means that the default values for the constructor of <code>decoder.Decoder</code> were employed. With these pieces of information, we can now define the architecture of the variational decoder:</p>
+<p><strong>Input</strong> A point <span class="math inline">\(z \in Z = \mathbb{R}^L\)</span>, for <span class="math inline">\(L=128\)</span>, and a batch of <span class="math inline">\(T=2048\)</span> points <span class="math inline">\(p_i \in \mathbb{R}^3\)</span>.</p>
+<p><strong>Output</strong> Exactly the same as the ONet, ie, the approximated occupancies <span class="math display">\[
+    f_\theta(z, p_1), \cdots, f_\theta(z, p_T) \in [0,1].
+\]</span></p>
+<p><strong>Evaluation</strong> In order of application:</p>
+<p>For each <span class="math inline">\(p_i\)</span>, for <span class="math inline">\(i \in [1:T]\)</span>:</p>
+<ol type="1">
+<li>Fully connected NN mapping both <span class="math inline">\(p_i\)</span> and <span class="math inline">\(z\)</span> to 128-dim;</li>
+<li>5 VarDec ResNet-Blocks;</li>
+<li>ReLU activation layer (128dim);</li>
+<li>Fully connected NN - 128-dim to 1-dim;</li>
+</ol>
+<p><strong>Definition (VarDec ResNet-block)</strong> It uses the same class as the PointNet ResNet-block (<code>ResnetBlockFC</code>), but with different dimensions: <code>size_in = size_out = size_h = 128</code>. Note that <code>size_in == size_out</code> implies that we don’t need a FCNN mapping the input for step 1 to <span class="math inline">\(x_s\)</span>.</p>
+<p>Therefore, one block is defined as the following composition, in order of application:</p>
+<ol type="1">
+<li>ReLU activation layer (128-dim);</li>
+<li>Fully connected NN - 128-dim to 128-dim;</li>
+<li>ReLU activation layer (128-dim);</li>
+<li>Fully connected NN - 128-dim to 128-dim;</li>
+</ol>
+<p>The final output is given by the sum of the output from step 4 and the input for step 1.</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
+<h3 id="variational-encoder---architecture"><span class="header-section-number">3.5.4</span> Variational Encoder - Architecture</h3>
 </body>
 </html>

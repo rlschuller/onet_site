@@ -82,15 +82,20 @@ Using the abstract definition, the authors presented solutions for 4 different p
 
 Besides the expected lack of complete coverage of all implementation nuances, a few inconsistencies were found in the article and in the supplementary material. The source code was an important settler for the questions that arouse during my readings, so we'll adopt the following typographical convention:
 
-(see `path_to_a_file`) refers to a file in [https://github.com/autonomousvision/occupancy_networks](https://github.com/autonomousvision/occupancy_networks)
+(see `path_to_a_file`) refers to a file in [https://github.com/autonomousvision/occupancy_networks](https://github.com/autonomousvision/occupancy_networks).
 
 
 Common
---------
+------
 
 ### ONet Architecture - The Big Picture
 
-In all experiments, the same base architecture was employed: 
+According to the supplementary material (sec 1.1 Architectures): "We employ the same occupancy network architecture (Fig. 1) in all experiments". By studying the source code, one can see that this statement isn't accurate, since it does not generalize to the *unconditional mesh generation* experiment.
+
+For the other 3 experiments, the original assertive is correct. With these particularities in mind, we propose the following naming scheme: ONet architecture will be reserved for the architecture described in this section, and the decoder for unconditional mesh generation will be denoted variational decoder.
+
+Naturally, the utterances in the former two paragraphs are quite strong and require reasonable justification. This will be presented in the [Unconditional Mesh Generation](#unconditional-mesh-generation) section.
+
 
 ![**Figure 1** Architecture of the *Occupancy Network*.](img/common_arch.svg){width=80%}
 
@@ -171,10 +176,10 @@ Since the sum between scalars and vectors is already implicitly defined in the d
 We'll now describe a single ONet ResNet-block (see `im2mesh/layers.py - class CResnetBlockConv1d`) as the composition of previously defined components, in the order of application:
 
 1. CBN layer;
-2. ReLU activation function in each dimension;
+2. ReLU activation function;
 3. Fully-connected layer;
 4. CBN layer;
-5. ReLU activation function in each dimension;
+5. ReLU activation function;
 6. Fully-connected layer;
 
 To get the output of the ONet ResNet-block, we then sum the input of step 1 to the output of step 6.
@@ -288,7 +293,7 @@ in which the division is piecewise.
 
 $\blacksquare$
 
-### The Image Encoder
+### Image Encoder
 
 ![**Figure 2** Modified ResNet18 - the image encoder.](img/svi_encoder.svg){width=100%}
 
@@ -341,11 +346,14 @@ class ResnetBlockFC(nn.Module):
 
 For *PointNet ResNet-blocks*: `size_in=1024`, `size_out=512` and `size_h=512`. Therefore one block is defined as the following composition, in order of application:
 
-1. Fully connected NN - 1024-dim to 512-dim;
-2. Fully connected NN - 512-dim to 512-dim;
-3. ReLU activation layer;
+1. ReLU activation layer (1024-dim);
+2. Fully connected NN - 1024-dim to 512-dim;
+3. ReLU activation layer (512-dim);
+4. Fully connected NN - 512-dim to 512-dim;
 
-Since the input and output dimensions differ, we have an additional FCNN projecting the input for step 1 (1024-dim) to $x_s$ (512-dim). Hence the final output is the sum of the output from step 3 and $x_s$.
+Since the input and output dimensions differ, we have an additional FCNN projecting the input for step 1 (1024-dim) to $x_s$ (512-dim). Hence the final output is the sum of the output from step 4 and $x_s$.
+
+Note that this block can be described as an ONet ResNet-block without the CBN layers and with different dimensions.
 
 $\blacksquare$
 
@@ -379,12 +387,12 @@ Suppose that we want to generate shapes in the category *car*, we would proceed 
 2. Train a Variational Autoencoder using this subset;
 3. Sample the latent space and use the decoder to generate new shapes;
 
-A more appropriate label would be *semi-supervised*, since we're both using the labels extract subsets in a *supervised* fashion and learning about the distributions of these subsets in an *unsupervised* manner.
+A more appropriate label would be *semi-supervised*, since we're both using the labels to extract subsets in a *supervised* fashion and learning about the distributions of these subsets in an *unsupervised* manner.
 
 
-###  The Encoder
+### Variational Encoder - Abstract Definition
 
-Preceding the low level definition, it's a good idea to keep in mind a high level model of what we're trying to achieve. The busy reader skip this section by jumping directly to the definition of *encoder latent*.
+Preceding the low level definition, it's a good idea to keep in mind a high level model of what we're trying to achieve. The busy reader can skip this section by jumping directly to the definition of *encoder latent*.
 
 Traditional learning-based autoencoders are usually defined as two neural networks:
 
@@ -396,9 +404,9 @@ $$
 	D_\theta: Z \to X
 $$
 
-One called the encoder, that takes the input $x \in X$ and maps it to a smaller dimensional latent space $Z$; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in  $Z$.
+One called the encoder, that takes the input $x \in X$ and maps it to a dimensionally smaller latent space $Z$; and another called decoder, that performs the inverse, ie, that tries to reconstruct the original input from a point in  $Z$.
 
-Given a set o inputs $B = \{x_1, \cdots ,x_N\} \in X$, we can define a loss function
+Given a set of inputs $B = \{x_1, \cdots ,x_N\} \in X$, we can define a loss function
 
 $$
 	\mathcal{L}_B(\theta, \psi) 
@@ -424,7 +432,9 @@ $$
 	g_\psi(x0) = q_\psi(z | x0) \in P(Z),
 $$
 
-in which $P(Z)$ is the space of probability measures on $Z$. To use this new encoder, we can define a new loss function:
+in which $P(Z)$ is the space of probability measures on $Z$. 
+
+To use this new encoder, we can define a new loss function:
 
 $$
 	\mathcal{L}'_B(\theta, \psi) 
@@ -433,7 +443,7 @@ $$
 	\Big[
 		 \mathcal{L}\big(D_\theta(\tilde z_i), x_i\big)
 		 +
-		\mathcal{L}_P\big(q_\psi(x_i), \mathcal{N}(0,1)\big)
+		\mathcal{L}_P\big(g_\psi(x_i), \mathcal{N}(0,1)\big)
 	\Big],
 $$
 
@@ -447,38 +457,43 @@ $$
 	\mathcal{L}_P \text{ is a loss function for two probabilities in }P(Z)
 $$
 
-Naturally, one can tweak the stochastic loss function $\mathcal{L}'_B$ by using different sampling schemes or different arguments for $\mathcal{L}_P$, but this example encapsulates the basic idea of a *variational autoencoder* - VAC for short.
+Naturally, one can tweak the stochastic loss function $\mathcal{L}'_B$ by using different sampling schemes or different arguments for $\mathcal{L}_P$, but this example encapsulates the basic idea of a *variational autoencoder* - VAC for short. 
 
-**Definition (Variational encoder)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
+Since this changes force the latent space to be more regular, one can generate new plausible outputs by taking random $z \in Z$ according to the standard normal distribution or by performing interpolations in the latent space for example.
+
+**Definition (Encoder latent)** Let $p_i \in \mathbb{R}^3$ be a sequence of $K = 2048$ positions in 3D space and $o_i \in \{0, 1\}$ be their corresponding ground truth *occupancies*. The encoder
 
 $$
 	g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
 $$
 
-takes the points and their occupancies and maps them to values in $\mathbb{R}^L$ that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, p_i)_{i=1:K})$ in the latent space $\mathbb{R}^L$.
+takes the points and their occupancies and maps them to a pair of values in $\mathbb{R}^L$, for $L=128$, that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, p_i)_{i=1:K}) =\mathcal{N}(\mu_\psi, \sigma_\psi)$ in the latent space $\mathbb{R}^L$.
+
+Just as a side note, the labeling *encoder latent* isn't a hallucination: it's the name given in the source code (see `im2mesh/onet/models/encoder_latent.py`) and in the configuration files (see `configs/unconditional/*.yaml`).
 
 $\blacksquare$
 
-### The loss function
 
-The variational loss function is given by:
+### Variational Loss Function
+
+The variational version of the loss function is given by:
 
 $$
 	\mathcal{L}^{\text{gen}}_{\mathcal{B}}(\theta, \psi) 
 = 
 	\frac{1}{|\mathcal{B}|}  \sum_{i=1}^{|\mathcal{B}|} 
 	\left[
-		\sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},z_i), o_{ij}\right)
-		+ \mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
+		\sum_{j=1}^ K \mathcal{L}\left(f_\theta(p_{ij},\tilde z_i), o_{ij}\right)
+		+ \mathrm{KL} \left(\mathcal{N}(\mu_\psi, \sigma_\psi)\,\|\, \mathcal{N}(0,1) \right)
 	\right]
 $$
 
-in which $\mathrm{KL}$ denotes the KL-divergence  and $\tilde z_i \in Z$ is a single random sample from the probability distribution given by the encoder: $q_\psi(z_i | (p_{ij}, o_{ij})_{j=1:K})$.
+in which $\mathcal{L}$ is the loss function defined [earlier](#training-and-the-loss-function), $\mathrm{KL}$ denotes the KL-divergence and $\tilde z_i \in \mathbb{R}^L$ is a single random sample from the probability distribution given by the encoder: $\mathcal{N}(\mu_\psi, \sigma_\psi)$.
 
 More info about the KL-divergence and its interpretations can be found [here](https://en.wikipedia.org/wiki/Kullback-Leibler_divergence). For us, the important thing is that it's a loss function between probability distributions whose formula simplifies to
 
 $$
-\mathrm{KL} \left(q_\psi(\tilde z | (p_{ij}, o_{ij})_{j=1:K}) \,\|\, \mathcal{N}(0,1) \right)
+	\mathrm{KL} \left(\mathcal{N}(\mu, \sigma) \,\|\, \mathcal{N}(0,1) \right)
 =
 	\frac{1}{2}
 	\sum_{i=1}^L
@@ -487,4 +502,56 @@ $$
 	\right).
 $$
 
+
+### Variational Decoder - Architecture
+
+As we said before, the architecture for this decoder and ONet's one aren't the same. In the configuration files (see `configs/unconditional/*.yaml`) it's clear that the `simple` decoder was used. The dictionary for ONet decoders (see `im2mesh/onet/models/__init__.py`) defines the following:
+
+```
+# Decoder dictionary
+decoder_dict = {
+    'simple': decoder.Decoder,
+    'cbatchnorm': decoder.DecoderCBatchNorm,
+    'cbatchnorm2': decoder.DecoderCBatchNorm2,
+    'batchnorm': decoder.DecoderBatchNorm,
+    'cbatchnorm_noresnet': decoder.DecoderCBatchNormNoResnet,
+}
+```
+
+Hence, the class that defines the `simple` decoder is `decoder.Decoder`. 
+
+Another important observation is that the optional entry `model:decoder_kwargs` isn't defined in the `unconditional` configuration files, which means that the default values for the constructor of `decoder.Decoder` were employed. With these pieces of information, we can now define the architecture of the variational decoder:
+
+**Input** A point $z \in Z = \mathbb{R}^L$, for $L=128$, and a batch of $T=2048$ points $p_i \in \mathbb{R}^3$.
+
+**Output** Exactly the same as the ONet, ie, the approximated occupancies
+$$
+	f_\theta(z, p_1), \cdots, f_\theta(z, p_T) \in [0,1].
+$$
+
+**Evaluation** In order of application: 
+
+For each $p_i$, for $i \in [1:T]$:
+
+1. Fully connected NN mapping both $p_i$ and $z$ to 128-dim;
+2. 5 VarDec ResNet-Blocks;
+3. ReLU activation layer (128dim);
+4. Fully connected NN - 128-dim to 1-dim;
+
+**Definition (VarDec ResNet-block)** It uses the same class as the PointNet ResNet-block (`ResnetBlockFC`), but with different dimensions: `size_in = size_out = size_h = 128`. Note that `size_in == size_out` implies that we don't need a FCNN mapping the input for step 1 to $x_s$.
+
+Therefore, one block is defined as the following composition, in order of application:
+
+1. ReLU activation layer (128-dim);
+2. Fully connected NN - 128-dim to 128-dim;
+3. ReLU activation layer (128-dim);
+4. Fully connected NN - 128-dim to 128-dim;
+
+The final output is given by the sum of the output from step 4 and the input for step 1.
+
 $\blacksquare$
+
+
+ 
+
+### Variational Encoder - Architecture
