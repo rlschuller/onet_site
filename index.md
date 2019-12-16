@@ -21,7 +21,7 @@ Abstract Definition
 
 The problem of representing 3D structures is harder than its 2D counterpart. Good solutions for it are specially important for learning-based algorithms, since bad representations usually yield unreasonable large memory requirements, glaring inconsistencies or other difficulties.
 
-An *Occupancy Network* is a state-of-the-art solution that uses implicit functions (neural networks with parameters $\theta$) to represent 3D objects in a compact and expressive manner. Bellow we have its formal definition.
+An *Occupancy Network* [1] is a state-of-the-art solution that uses implicit functions (neural networks with parameters $\theta$) to represent 3D objects in a compact and expressive manner. Bellow we have its formal definition.
 
 **Definition (Occupancy Network)** For a given input $x \in X$, we want a binary classification neural network: $f^x_\theta : \mathbb{R}^3 \to [0,1]$. We can just add $x$ to the inputs, ie, 
 
@@ -138,7 +138,7 @@ This is known as the *logistic sigmoid*.
 
 ### Conditional Batch Normalization (CBN) Layer
 
-Let $(p_i)_{i=[1:T]}$ be the vector of the input points, as shown in Figure 1. With this indexation in mind, let us define a CBN layer [1]:
+Let $(p_i)_{i=[1:T]}$ be the vector of the input points, as shown in Figure 1. With this indexation in mind, let us define a CBN layer [2]:
 
 **Input** 
 
@@ -160,13 +160,9 @@ $$f_{out}^i = \gamma(c) \frac{f_{in}^i - \mu}{\sqrt{\sigma^2 + \epsilon}} + \bet
 
 in which $\epsilon = 10^{-5}$ is a constant added for numerical stability.
 
-Since the sum between scalars and vectors is already implicitly defined in the denominator, it's important to highlight (as in the original article [1]) that the multiplication by $\gamma$ is a *piecewise* (not inner) product.
+Since the sum between scalars and vectors is already implicitly defined in the denominator, it's important to highlight (as in the original article [2]) that the multiplication by $\gamma$ is a *piecewise* (not inner) product.
 
-**Observation** The PyTorch's class `BatchNorm1d` [2], used to compute $\frac{f_{in}^i - \mu}{\sqrt{\sigma^2 + \epsilon}}$ (see `im2mesh/layers.py`), keeps a running mean of the first two moments. These estimates are then used for normalization during evaluation.
-
-[1] [Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift](https://arxiv.org/abs/1502.03167) - Sergey Ioffe, Christian Szegedy (2015)
-
-[2] [torch.nn.modules.batchnorm](https://pytorch.org/docs/stable/nn.html#batchnorm1d)
+**Observation** The PyTorch's class `BatchNorm1d` [3], used to compute $\frac{f_{in}^i - \mu}{\sqrt{\sigma^2 + \epsilon}}$ (see `im2mesh/layers.py`), keeps a running mean of the first two moments. These estimates are then used for normalization during evaluation.
 
 
 ### ONet ResNet-block
@@ -196,9 +192,9 @@ $$
 $$
 in other words, the *occupancy function* is the characteristic function for the set of the solid shape.
 
-All 4 experiments used the ShapeNet [?] database for training, which is a dataset composed of annotated CAD meshes. To extract the data from each of the shapes, the following procedure was used:
+All 4 experiments used the ShapeNet [4] database for training, which is a dataset composed of annotated CAD meshes. To extract the data from each of the shapes, the following procedure was used:
 
-1. Make sure the mesh is watertight with code provided by Stutz et al. [?];
+1. Make sure the mesh is watertight with code provided by Stutz et al. [5];
 2. Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;
 3. Using an uniform random distribution, sample 100k points from the new bounding box with 0.05 padding on the sides;
 4. Choose (with repetition) $K=2048$ points;
@@ -206,7 +202,6 @@ All 4 experiments used the ShapeNet [?] database for training, which is a datase
 
 **Observation** Contradicting the supplementary material, the source code defines $K=1024$ (step 4) for the voxel super resolution experiment (see `configs/voxels/onet.yaml` and `configs/voxels/onet_pretrained.yaml`).
 
-[?] [ShapeNet: An Information-Rich 3D Model Repository](https://arxiv.org/abs/1512.03012) - A. X. Chang et al. (2015)
 
 
 ### Training And The Loss Function
@@ -270,11 +265,9 @@ The *mini-batch gradient descent* is a variation of the standard gradient descen
 
 **Observation** For all ONet experiments, the stop criteria is based on the IoU metric.
 
-To compute the gradient approximations and update the parameters, Adam optimizer [?] was used with a learning rate of $\eta=10^{-4}$ and no weight decay. The default PyTorch's values for the other hyperparameters were left untouched: $\beta_1=.9$, $\beta_2=.999$ and $\epsilon=10^{-8}$.
+To compute the gradient approximations and update the parameters, Adam optimizer [6] was used with a learning rate of $\eta=10^{-4}$ and no weight decay. The default PyTorch's values for the other hyperparameters were left untouched: $\beta_1=.9$, $\beta_2=.999$ and $\epsilon=10^{-8}$.
 
-[?] [Adam: A Method for Stochastic Optimization](https://arxiv.org/abs/1412.6980),  Diederik P. Kingma, Jimmy Ba (2014)
 
-[?] [Learning 3D Shape Completion under Weak Supervision](https://arxiv.org/abs/1805.07290), Stutz et al. (2018)
 
 
 Single View Image Reconstruction
@@ -299,11 +292,7 @@ $\blacksquare$
 
 **Output** A feature vector $c \in \mathbb{R}^C$, for $C=256$.
 
-**Evaluation** The only difference between ResNet18 [3] and the neural network used as the encoder is the last fully connected layer. Instead of producing a 512-dim output, the last layer projects it down to a 256-dim vector $c$. The encoder was pre-trained on the ImageNet dataset.
-
-[3] [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385), Kaiming He et al. (2015)
-
-The reference above is a landmark of sorts for its area - hence the large number of citations. They introduced the idea of using residues to make deep neural networks viable.
+**Evaluation** The only difference between ResNet18 [7] and the neural network used as the encoder is the last fully connected layer. Instead of producing a 512-dim output, the last layer projects it down to a 256-dim vector $c$. The encoder was pre-trained on the ImageNet dataset.
 
 One eye-catching piece of information is that the authors of ONet (see `im2mesh/encoder/conv.py`) did implement several sizes of ResNets: 18, 34, 50 and 101.  Since this particular encoder was pre-trained, it raises the question of why ResNet18 worked better than its deeper counterparts.  
 
@@ -317,7 +306,7 @@ Point Cloud Completion
 
 **Input** M=300 points generated from a mesh taken from ShapeNet, in the following manner:
 
-1. Make sure the mesh is watertight with code provided by Stutz et al. [?];
+1. Make sure the mesh is watertight with code provided by Stutz et al. [5];
 2. Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;
 3. Sample 300 points from the *surface* of the model;
 4. Apply noise to the points using a Gaussian distribution with zero mean and standard deviation of 0.05 (see `im2mesh/data/transforms.py`);
@@ -326,7 +315,7 @@ Point Cloud Completion
 
 **Description** The network consists of 2 fully connected layers (for input and output) and 5 *PointNet ResNet-blocks* intercalated by pooling+expansion layers, as shown in Figure 3.
 
-**Note** In the supplementary there's no distinction between *PointNet ResNet-blocks* and ONet ones. In the source code they're completely different (see `im2mesh/layers.py` and `./im2mesh/encoder/pointnet.py`).
+**Note** In the supplementary there's no distinction between *PointNet ResNet-blocks* and ONet ones. In the source code they're different (see `im2mesh/layers.py` and `./im2mesh/encoder/pointnet.py`).
 
 We can find a legacy definition of the ONet architecture, and in this version both used the same simplified ResNet-block defined bellow. This might explain the inaccuracies in the PDFs. Without further ado, let us present the definition from the source code:
 
@@ -367,7 +356,7 @@ Voxel Super Resolution
 
 **Input** A grid of $32^3$ voxels. More specifically, voxels generated from (watertight) ShapeNet meshes with the algorithm bellow: 
 
-1. Normalize and make the shape watertight using the methods described previously;
+1. Normalize and make the shape watertight using the methods described [previously](#pre-processing-shapes);
 2. Mark all voxels that intercept the model's surface as occupied;
 3. For each of the remaining voxels:
 	- Choose 1 random point inside the voxel;
@@ -469,14 +458,14 @@ $$
 	g_\psi : (p, o) \mapsto (\mu_\psi, \sigma_\psi)
 $$
 
-takes the points and their occupancies and maps them to a pair of values in $\mathbb{R}^L$, for $L=128$, that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, p_i)_{i=1:K}) =\mathcal{N}(\mu_\psi, \sigma_\psi)$ in the latent space $\mathbb{R}^L$.
+takes the points and their occupancies and maps them to a pair of values in $\mathbb{R}^L$, for $L=128$, that represent respectively the average and the standard deviation of a Gaussian distribution $q_\psi(z |(p_i, o_i)_{i=1:K}) =\mathcal{N}(\mu_\psi, \sigma_\psi)$ in the latent space $\mathbb{R}^L$.
 
 Just as a side note, the labeling *encoder latent* isn't a hallucination: it's the name given in the source code (see `im2mesh/onet/models/encoder_latent.py`) and in the configuration files (see `configs/unconditional/*.yaml`).
 
 $\blacksquare$
 
 
-### Variational Loss Function
+### Variational Loss Function and Training
 
 The variational version of the loss function is given by:
 
@@ -504,6 +493,8 @@ $$
 	\right).
 $$
 
+The same gradient descent method and batch size seen in the [Common](#training-and-the-loss-function) section was employed.
+
 
 ### Variational Decoder - Architecture
 
@@ -522,7 +513,7 @@ decoder_dict = {
 
 Hence, the class that defines the `simple` decoder is `decoder.Decoder`. 
 
-Another important observation is that the optional entry `model:decoder_kwargs` isn't defined in the `unconditional` configuration files, which means that the default values for the constructor of `decoder.Decoder` were employed. With these pieces of information, we can now define the architecture of the variational decoder:
+Another important observation is that the optional entry `model:decoder_kwargs` isn't defined in the `unconditional` configuration files, which means that the default values for the constructor of `decoder.Decoder` were used. With these pieces of information, we can now define the architecture of the variational decoder:
 
 **Input** A point $z \in Z = \mathbb{R}^L$, for $L=128$, and a batch of $T=2048$ points $p_i \in \mathbb{R}^3$.
 
@@ -554,6 +545,10 @@ $\blacksquare$
  
 ### Variational Encoder - Architecture
 
+Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here's a picture describing the architecture:
+
+![**Figure 5** Variational encoder's architecture.](img/var_encoder.svg)
+
 **Input** A batch of $T=2048$ points $p_i \in \mathbb{R}^3$ and their respective ground truth *occupancies* $o_i$. See [Pre-Processing Shapes](#pre-processing-shapes) for more details about the process of acquiring the data. 
 
 **Output** Two vectors in $\mu, s=\log(\sigma) \in \mathbb{R}^L$, for $L = 128$.
@@ -566,14 +561,34 @@ $\blacksquare$
 4. Maxpool (128-dim) expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;
 5. ReLU activation layer (256-dim);
 6. Fully connected NN - 256-dim to 128-dim;
-7. Maxpool expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;
+7. Maxpool expanded and concatenated w/ the output of step 6 - resulting in a 256-dim output;
 8. ReLU activation layer (256-dim);
 9. Fully connected NN - 256-dim to 128-dim;
 10. Maxpool (128-dim)
 11. $\mu$ = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;
 12. $s$ = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;
 
-Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here's a picture describing the architecture:
 
-![**Figure 5** Variational encoder's architecture.](img/var_encoder.svg)
+### Sampling from the Latent Space
 
+After training the VAC for a particular category, one can generate new objects by sampling from the prior probability distribution of the latent space $Z = \mathbb{R}^L$, which is by construction $\mathcal{N}(0, 1) \in P(\mathbb{R}^L)$.
+
+![**Figure 6** Qualitative results for unconditional mesh generation for the cateories: car, airplane, sofa and chair.](img/unconditional.png){width=80%}
+
+
+References
+==========
+
+[1] [Occupancy Networks: Learning 3D Reconstruction in Function Space](https://arxiv.org/abs/1812.03828), L. Mescheder et. al (2019)
+
+[2] [Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift](https://arxiv.org/abs/1502.03167), S. Ioffe, C. Szegedy (2015)
+
+[3] [torch.nn.modules.batchnorm](https://pytorch.org/docs/stable/nn.html#batchnorm1d)
+
+[4] [ShapeNet: An Information-Rich 3D Model Repository](https://arxiv.org/abs/1512.03012), A. X. Chang et al. (2015)
+
+[5] [Learning 3D Shape Completion under Weak Supervision](https://arxiv.org/abs/1805.07290), D. Stutz, A. Geiger (2018)
+
+[6] [Adam: A Method for Stochastic Optimization](https://arxiv.org/abs/1412.6980),  D. P. Kingma, Jimmy Ba (2014)
+
+[7] [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385), K. He et al. (2015)
