@@ -545,7 +545,7 @@ $\blacksquare$
  
 ### Variational Encoder - Architecture
 
-Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here's a picture describing the architecture:
+Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here's a picture describing the architecture (see `im2mesh/onet/models/encoder_latent.py`):
 
 ![**Figure 5** Variational encoder's architecture.](img/var_encoder.svg)
 
