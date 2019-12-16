@@ -44,8 +44,12 @@
 <li><a href="#single-view-image-reconstruction"><span class="toc-section-number">3.2</span> Single View Image Reconstruction</a><ul>
 <li><a href="#image-encoder"><span class="toc-section-number">3.2.1</span> Image Encoder</a></li>
 </ul></li>
-<li><a href="#point-cloud-completion"><span class="toc-section-number">3.3</span> Point Cloud Completion</a></li>
-<li><a href="#voxel-super-resolution"><span class="toc-section-number">3.4</span> Voxel Super Resolution</a></li>
+<li><a href="#point-cloud-completion"><span class="toc-section-number">3.3</span> Point Cloud Completion</a><ul>
+<li><a href="#point-cloud-encoder"><span class="toc-section-number">3.3.1</span> Point Cloud Encoder</a></li>
+</ul></li>
+<li><a href="#voxel-super-resolution"><span class="toc-section-number">3.4</span> Voxel Super Resolution</a><ul>
+<li><a href="#voxel-encoder"><span class="toc-section-number">3.4.1</span> Voxel Encoder</a></li>
+</ul></li>
 <li><a href="#unconditional-mesh-generation"><span class="toc-section-number">3.5</span> Unconditional Mesh Generation</a><ul>
 <li><a href="#variational-encoder---abstract-definition"><span class="toc-section-number">3.5.1</span> Variational Encoder - Abstract Definition</a></li>
 <li><a href="#variational-loss-function"><span class="toc-section-number">3.5.2</span> Variational Loss Function</a></li>
@@ -112,9 +116,8 @@
 <p><strong>Input</strong> The output of a task-specific encoder <span class="math inline">\(c \in X = \mathbb{R}^C\)</span> and a batch of <span class="math inline">\(T\)</span> points <span class="math inline">\(p_i \in \mathbb{R}^3\)</span>.</p>
 <p><strong>Output</strong> To be consistent with our previous definition, the output is given by the numbers <span class="math display">\[f_{\theta}(c, p_1),\, \cdots,\, f_{\theta}(c, p_T) \in [0,1].\]</span> In other words, for each point <span class="math inline">\(p_i\)</span> in the batch, we get a number in <span class="math inline">\([0, 1]\)</span>.</p>
 <p><strong>Evaluation</strong> To show how the architecture works we’ll first explain the <em>Big Picture</em> - how the components are connected - and afterwards tell exactly what each component does.</p>
-<p>For each point <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> in the batch:</p>
 <ol type="1">
-<li>Use a fully-connected layer to produce a 256-dim feature vector from <span class="math inline">\(p_i\)</span>;</li>
+<li>Use a fully-connected layer to produce a 256-dim feature vector from each of the points <span class="math inline">\(p_i\)</span>;</li>
 <li>Do 5 times:
 <ul>
 <li>Take the output from the previous step and use a <strong>ONet ResNet-block</strong> to produce a new 256-dim feature vector;</li>
@@ -246,10 +249,11 @@
 <p>The reference above is a landmark of sorts for its area - hence the large number of citations. They introduced the idea of using residues to make deep neural networks viable.</p>
 <p>One eye-catching piece of information is that the authors of ONet (see <code>im2mesh/encoder/conv.py</code>) did implement several sizes of ResNets: 18, 34, 50 and 101. Since this particular encoder was pre-trained, it raises the question of why ResNet18 worked better than its deeper counterparts.</p>
 <h2 id="point-cloud-completion"><span class="header-section-number">3.3</span> Point Cloud Completion</h2>
+<h3 id="point-cloud-encoder"><span class="header-section-number">3.3.1</span> Point Cloud Encoder</h3>
 <figure>
 <img src="img/psgn_encoder.svg" alt="Figure 3 Encoder for point cloud completion." style="width:100.0%" /><figcaption><strong>Figure 3</strong> Encoder for point cloud completion.</figcaption>
 </figure>
-<p><strong>Input</strong> M=300 points generated from a watertight mesh taken from ShapeNet in the following manner:</p>
+<p><strong>Input</strong> M=300 points generated from a mesh taken from ShapeNet, in the following manner:</p>
 <ol type="1">
 <li>Make sure the mesh is watertight with code provided by Stutz et al. [?];</li>
 <li>Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;</li>
@@ -281,6 +285,7 @@ class ResnetBlockFC(nn.Module):
 <p>Note that this block can be described as an ONet ResNet-block without the CBN layers and with different dimensions.</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
 <h2 id="voxel-super-resolution"><span class="header-section-number">3.4</span> Voxel Super Resolution</h2>
+<h3 id="voxel-encoder"><span class="header-section-number">3.4.1</span> Voxel Encoder</h3>
 <figure>
 <img src="img/voxel_encoder.svg" alt="Figure 4 Encoder for voxel super resolution." /><figcaption><strong>Figure 4</strong> Encoder for voxel super resolution.</figcaption>
 </figure>
@@ -400,10 +405,9 @@ decoder_dict = {
 <p><strong>Output</strong> Exactly the same as the ONet, ie, the approximated occupancies <span class="math display">\[
     f_\theta(z, p_1), \cdots, f_\theta(z, p_T) \in [0,1].
 \]</span></p>
-<p><strong>Evaluation</strong> In order of application:</p>
-<p>For each <span class="math inline">\(p_i\)</span>, for <span class="math inline">\(i \in [1:T]\)</span>:</p>
+<p><strong>Description</strong> The network can be described as the composition of the following components, in order of application:</p>
 <ol type="1">
-<li>Fully connected NN mapping both <span class="math inline">\(p_i\)</span> and <span class="math inline">\(z\)</span> to 128-dim;</li>
+<li>Fully connected NN mapping both <span class="math inline">\(p_i\)</span> and <span class="math inline">\(z\)</span> to a 128-dim vector for each of the T points;</li>
 <li>5 VarDec ResNet-Blocks;</li>
 <li>ReLU activation layer (128dim);</li>
 <li>Fully connected NN - 128-dim to 1-dim;</li>
@@ -419,5 +423,26 @@ decoder_dict = {
 <p>The final output is given by the sum of the output from step 4 and the input for step 1.</p>
 <p><span class="math inline">\(\blacksquare\)</span></p>
 <h3 id="variational-encoder---architecture"><span class="header-section-number">3.5.4</span> Variational Encoder - Architecture</h3>
+<p><strong>Input</strong> A batch of <span class="math inline">\(T=2048\)</span> points <span class="math inline">\(p_i \in \mathbb{R}^3\)</span> and their respective ground truth <em>occupancies</em> <span class="math inline">\(o_i\)</span>. See <a href="#pre-processing-shapes">Pre-Processing Shapes</a> for more details about the process of acquiring the data.</p>
+<p><strong>Output</strong> Two vectors in <span class="math inline">\(\mu, s=\log(\sigma) \in \mathbb{R}^L\)</span>, for <span class="math inline">\(L = 128\)</span>.</p>
+<p><strong>Description</strong> The network can be described as the composition of the following components, in order of application:</p>
+<ol type="1">
+<li>A fully connected NN mapping the 4-dim vector <span class="math inline">\((p_i, o_i)\)</span> to a 128-dim vector, for each <span class="math inline">\(i \in [1:T]\)</span>;</li>
+<li>ReLU activation layer (128-dim);</li>
+<li>Fully connected NN - 128-dim to 128-dim;</li>
+<li>Maxpool (128-dim) expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;</li>
+<li>ReLU activation layer (256-dim);</li>
+<li>Fully connected NN - 256-dim to 128-dim;</li>
+<li>Maxpool expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;</li>
+<li>ReLU activation layer (256-dim);</li>
+<li>Fully connected NN - 256-dim to 128-dim;</li>
+<li>Maxpool (128-dim)</li>
+<li><span class="math inline">\(\mu\)</span> = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;</li>
+<li><span class="math inline">\(s\)</span> = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;</li>
+</ol>
+<p>Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here’s a picture describing the architecture:</p>
+<figure>
+<img src="img/var_encoder.svg" alt="Figure 5 Variational encoder’s architecture." /><figcaption><strong>Figure 5</strong> Variational encoder’s architecture.</figcaption>
+</figure>
 </body>
 </html>

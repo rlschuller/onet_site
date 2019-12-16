@@ -105,9 +105,7 @@ Naturally, the utterances in the former two paragraphs are quite strong and requ
 
 **Evaluation** To show how the architecture works we'll first explain the *Big Picture* - how the components are connected - and afterwards tell exactly what each component does.
 
-For each point $p_i \in \mathbb{R}^3$ in the batch:
-
-1. Use a fully-connected layer to produce a 256-dim feature vector from $p_i$;
+1. Use a fully-connected layer to produce a 256-dim feature vector from each of the points $p_i$;
 2. Do 5 times:
 	- Take the output from the previous step and use a **ONet ResNet-block** to produce a new 256-dim feature vector;
 3. Take the output from the last **ONet ResNet-block** and pass through a **CBN layer** and a **ReLu activation**;
@@ -313,9 +311,11 @@ One eye-catching piece of information is that the authors of ONet (see `im2mesh/
 Point Cloud Completion
 ------------------------
 
+### Point Cloud Encoder
+
 ![**Figure 3** Encoder for point cloud completion.](img/psgn_encoder.svg){width=100%}
 
-**Input** M=300 points generated from a watertight mesh taken from ShapeNet in the following manner:
+**Input** M=300 points generated from a mesh taken from ShapeNet, in the following manner:
 
 1. Make sure the mesh is watertight with code provided by Stutz et al. [?];
 2. Normalize the shape such that its bounding box is centered at the origin and that the biggest side of the bounding box measures exactly 1;
@@ -360,6 +360,8 @@ $\blacksquare$
 
 Voxel Super Resolution
 ----------------------
+
+### Voxel Encoder
 
 ![**Figure 4** Encoder for voxel super resolution.](img/voxel_encoder.svg)
 
@@ -529,11 +531,9 @@ $$
 	f_\theta(z, p_1), \cdots, f_\theta(z, p_T) \in [0,1].
 $$
 
-**Evaluation** In order of application: 
+**Description** The network can be described as the composition of the following components, in order of application: 
 
-For each $p_i$, for $i \in [1:T]$:
-
-1. Fully connected NN mapping both $p_i$ and $z$ to 128-dim;
+1. Fully connected NN mapping both $p_i$ and $z$ to a 128-dim vector for each of the T points;
 2. 5 VarDec ResNet-Blocks;
 3. ReLU activation layer (128dim);
 4. Fully connected NN - 128-dim to 1-dim;
@@ -551,7 +551,29 @@ The final output is given by the sum of the output from step 4 and the input for
 
 $\blacksquare$
 
-
  
-
 ### Variational Encoder - Architecture
+
+**Input** A batch of $T=2048$ points $p_i \in \mathbb{R}^3$ and their respective ground truth *occupancies* $o_i$. See [Pre-Processing Shapes](#pre-processing-shapes) for more details about the process of acquiring the data. 
+
+**Output** Two vectors in $\mu, s=\log(\sigma) \in \mathbb{R}^L$, for $L = 128$.
+
+**Description** The network can be described as the composition of the following components, in order of application:
+
+1. A fully connected NN mapping the 4-dim vector $(p_i, o_i)$ to a 128-dim vector, for each $i \in [1:T]$;
+2. ReLU activation layer (128-dim);
+3. Fully connected NN - 128-dim to 128-dim;
+4. Maxpool (128-dim) expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;
+5. ReLU activation layer (256-dim);
+6. Fully connected NN - 256-dim to 128-dim;
+7. Maxpool expanded and concatenated w/ the output of step 3 - resulting in a 256-dim output;
+8. ReLU activation layer (256-dim);
+9. Fully connected NN - 256-dim to 128-dim;
+10. Maxpool (128-dim)
+11. $\mu$ = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;
+12. $s$ = the output from a fully connected NN (128-dim to 128-dim) applied to the output of step 10;
+
+Since this layer is a bit more extensive and the description in the supplementary material is incomplete, here's a picture describing the architecture:
+
+![**Figure 5** Variational encoder's architecture.](img/var_encoder.svg)
+
